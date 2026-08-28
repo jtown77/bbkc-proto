@@ -148,18 +148,6 @@
   .flowReps .fv { font-size:12px; font-weight:800; min-width:24px; text-align:center; color:var(--cream); }
   .flowHint { text-align:center; color:var(--text2); font-size:10px; margin:-2px 0 6px; letter-spacing:.3px; }
 
-  /* rest block */
-  .restCard { border:1.5px dashed var(--border); border-radius:var(--r-md);
-    display:flex; align-items:center; padding:8px 10px; background:rgba(122,122,125,.06); }
-  .restCard .rIcon { width:40px; height:40px; border-radius:50%; background:var(--card-elev);
-    display:flex; align-items:center; justify-content:center; margin-right:10px; font-size:16px; flex:none; }
-  .restCard .rName { flex:1; font-size:13px; font-weight:700; letter-spacing:1.5px; color:var(--text2); }
-  .restCard .rName small { display:block; letter-spacing:0; font-weight:400; font-size:10px; margin-top:1px; }
-  .restGap { height:10px; }
-  #addRest { width:100%; border:1.5px dashed var(--border); background:none; color:var(--text2);
-    padding:11px; border-radius:var(--r-md); font-size:13px; cursor:pointer; margin-top:2px; }
-  #addRest b { color:var(--primary); }
-
   /* group blocks (EMOM) */
   .grp { border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:14px; overflow:hidden; }
   .grp.active { border-color:var(--primary); }
@@ -309,10 +297,6 @@ let bellTarget = null;
 const $ = id => document.getElementById(id);
 
 function defaultLbs(eqp){ return eqp==='bodyweight' ? 0 : 53; }
-function fmtSecs(t){ const m=Math.floor(t/60), ss=t%60; return m+':'+String(ss).padStart(2,'0'); }
-function isRest(m){ return m && m.type==='rest'; }
-function addRest(){ cart.push({type:'rest', name:'Rest', secs:120, chainPrev:false, flowReps:1}); renderCart(); syncBar(); }
-function restSecs(a,d){ cart[a].secs=Math.max(15, cart[a].secs+d*15); renderCart(); syncBar(); }
 
 /* ── library render ── */
 function renderLib(){
@@ -365,7 +349,6 @@ function estPerSet(){
   if (mode==='emom') return groups.flatMap(g=>g.items).reduce((s,m)=> s + m.lbs*(m.eqp==='double'?2:1)*m.reps, 0);
   // fixed: each chained member inherits its chain's ×N (stored on the chain head)
   return cart.reduce((s,m,i)=>{
-    if (isRest(m)) return s;
     const chained = m.chainPrev || (cart[i+1] && cart[i+1].chainPrev);
     const f = chained ? (cart[chainStartIdx(i)].flowReps||1) : 1;
     return s + m.lbs*(m.eqp==='double'?2:1)*m.reps*f;
@@ -379,16 +362,15 @@ function syncBar(){
     $('cartLine1').textContent = mode==='fixed' ? 'The Rack is empty' : 'No exercises yet';
     $('cartLine2').textContent = 'Tap exercises below to add them';
   } else if (mode==='fixed'){
-    const exs = items.filter(m=>!isRest(m)).length;
-    $('cartLine1').textContent = `${exs} exercise${exs>1?'s':''} · ~${estPerSet().toLocaleString()} lbs/round`;
-    $('cartLine2').textContent = items.map(m=>isRest(m)?('Rest '+fmtSecs(m.secs)):m.name).join(' · ');
+    $('cartLine1').textContent = `${items.length} exercise${items.length>1?'s':''} · ~${estPerSet().toLocaleString()} lbs/round`;
+    $('cartLine2').textContent = items.map(m=>m.name).join(' · ');
   } else {
     const used = groups.filter(g=>g.items.length).length;
     const mins = groups.reduce((s,g)=>s+g.interval,0);
     $('cartLine1').textContent = `${groups.length} group${groups.length>1?'s':''} · ${items.length} exercises`;
     $('cartLine2').textContent = used<groups.length ? `Group ${groups.findIndex(g=>!g.items.length)+1} still needs exercises` : `${mins} min pattern · repeats to fill the clock`;
   }
-  $('cartDots').innerHTML = items.filter(m=>!isRest(m)).slice(-4).map(m=>{
+  $('cartDots').innerHTML = items.slice(-4).map(m=>{
     const b = BELLS.find(b=>b.lbs===m.lbs);
     return `<div class="d" style="background:${m.lbs? (b?b.c:'#555') : '#A93F48'}"></div>`;
   }).join('');
@@ -410,12 +392,9 @@ function renderCart(){
   $('cartSub').textContent = mode==='fixed' ? 'Part 1 · Fixed Sets' : 'Part 1 · EMOM';
   if (mode==='fixed'){ renderFixedCart(list); } else { renderEmomCart(list); }
   const items = allItems();
-  $('doneBtn').disabled = !items.filter(m=>!isRest(m)).length || (mode==='emom' && groups.some(g=>!g.items.length));
-  const exCount = items.filter(m=>!isRest(m)).length;
-  const restTotal = mode==='fixed' ? cart.filter(isRest).reduce((s,m)=>s+m.secs,0) : 0;
+  $('doneBtn').disabled = !items.length || (mode==='emom' && groups.some(g=>!g.items.length));
   $('cartStats').innerHTML = items.length ?
-    `<div><b>${exCount}</b> exercises</div><div>~<b>${estPerSet().toLocaleString()}</b> lbs/${mode==='fixed'?'round':'pattern'}</div>` +
-    (restTotal?`<div><b>${fmtSecs(restTotal)}</b> rest/round</div>`:'') : '';
+    `<div><b>${items.length}</b> exercises</div><div>~<b>${estPerSet().toLocaleString()}</b> lbs/${mode==='fixed'?'round':'pattern'}</div>` : '';
 }
 
 function renderFixedCart(list){
@@ -425,10 +404,9 @@ function renderFixedCart(list){
     return;
   }
   list.innerHTML = cart.map((m,i)=>{
-    const noChain = isRest(m) || isRest(cart[i-1]);
-    const chainHtml = i>0 ? (noChain ? '<div class="restGap"></div>' : chainConnector(m,i)) : '';
-    return chainHtml + (isRest(m) ? restCard(m,i) : mvCard(m,i,'fixed'));
-  }).join('') + `<button id="addRest" onclick="addRest()">⏱&nbsp; <b>+ Add rest period</b> — pause the clock mid-round</button>`;
+    const chainHtml = i>0 ? chainConnector(m,i) : '';
+    return chainHtml + mvCard(m,i,'fixed');
+  }).join('');
 }
 function chainConnector(m,i){
   const on = m.chainPrev;
@@ -446,7 +424,6 @@ function chainStartIdx(i){ let s=i; while(s>0 && cart[s].chainPrev) s--; return 
 function chainFlowReps(i){ return cart[chainStartIdx(i)].flowReps || 1; }
 function toggleChain(i,ev){
   ev.stopPropagation();
-  if (isRest(cart[i]) || isRest(cart[i-1])) return;
   cart[i].chainPrev = !cart[i].chainPrev;
   if (!cart[i].chainPrev){ cart[i].flowReps=1; }
   renderCart();
@@ -457,22 +434,6 @@ function bumpFlow(i,d){
   renderCart(); syncBar();
 }
 
-function restCard(m,i){
-  return `<div class="restCard mv">
-    <div class="ord">
-      <div class="ordBtn" onclick="move(${i},-1)">▲</div>
-      <div class="ordBtn" onclick="move(${i},1)">▼</div>
-    </div>
-    <div class="rIcon">⏱</div>
-    <div class="rName">REST<small>clock keeps the round paused</small></div>
-    <div class="repCtl">
-      <div class="pm" onclick="restSecs(${i},-1)">−</div>
-      <div class="rv">${fmtSecs(m.secs)}<small>rest</small></div>
-      <div class="pm" onclick="restSecs(${i},1)">+</div>
-    </div>
-    <div class="rm" onclick="rm(${i})">✕</div>
-  </div>`;
-}
 function mvCard(m,i,ctx,gi){
   const b = BELLS.find(b=>b.lbs===m.lbs);
   const dotStyle = m.lbs ? `background:${b?b.c:'#555'};color:${b&&b.dark?'#121215':'#fff'}` : 'background:#A93F48;color:#fff';
@@ -496,16 +457,9 @@ function mvCard(m,i,ctx,gi){
 }
 
 /* fixed-mode ops (1 arg) vs emom (2 args) */
-function normalizeChains(){
-  cart.forEach((m,i)=>{
-    if (isRest(m)) { m.chainPrev=false; m.flowReps=1; }
-    if (i===0) m.chainPrev=false;
-    else if (m.chainPrev && isRest(cart[i-1])) m.chainPrev=false;
-  });
-}
 function move(a,b,c){
   if (mode==='fixed'){ const i=a,d=b; const j=i+d; if(j<0||j>=cart.length)return;
-    [cart[i],cart[j]]=[cart[j],cart[i]]; normalizeChains(); }
+    [cart[i],cart[j]]=[cart[j],cart[i]]; }
   else { const g=a,i=b,d=c; const arr=groups[g].items; const j=i+d; if(j<0||j>=arr.length)return;
     [arr[i],arr[j]]=[arr[j],arr[i]]; }
   renderCart(); syncBar();
@@ -516,7 +470,7 @@ function rep(a,b,c){
   renderCart(); syncBar();
 }
 function rm(a,b){
-  if (mode==='fixed'){ cart.splice(a,1); normalizeChains(); }
+  if (mode==='fixed'){ cart.splice(a,1); if(cart[a]) cart[a].chainPrev = cart[a].chainPrev && a>0; }
   else { groups[a].items.splice(b,1); }
   renderCart(); syncBar(); renderLib();
 }
@@ -573,9 +527,8 @@ function loadBear(){
     {name:'Double Push Press', eqp:'double', lbs:53, reps:1, chainPrev:true, flowReps:1},
     {name:'Double Front Rack Squat', eqp:'double', lbs:53, reps:1, chainPrev:true, flowReps:1},
     {name:'Double Push Press', eqp:'double', lbs:53, reps:1, chainPrev:true, flowReps:1},
-    {type:'rest', name:'Rest', secs:120, chainPrev:false, flowReps:1},
   ];
-  renderCart(); syncBar(); renderLib(); toast('The Bear 🐻 — chain ×7, rest 2:00, 5 rounds');
+  renderCart(); syncBar(); renderLib(); toast('The Bear 🐻 — chain ×7, 5 sets, rest 2:00');
 }
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),2200); }
 
