@@ -48,7 +48,7 @@
     position:relative;
   }
   #cartBar.bump { transform:scale(1.03); border-color:var(--primary); }
-  #cartBar .icon { font-size:20px; }
+  #cartBar .icon { display:flex; align-items:center; }
   #cartBar .info { flex:1; min-width:0; }
   #cartBar .info .line1 { font-size:14px; font-weight:600; }
   #cartBar .info .line2 { font-size:11px; color:var(--text2); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -216,10 +216,10 @@
 
   <!-- CART BAR -->
   <div id="cartBar" onclick="openCart()">
-    <div class="icon">🛒</div>
+    <div class="icon"><svg id="kbIcon" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M8.2 9.1C8.07 8.2 7.6 5.9 7.6 5.2c0-1.5 1.6-2.4 4.4-2.4s4.4.9 4.4 2.4c0 .7-.47 3-.6 3.9" stroke="#F2E8D5" stroke-width="1.9" stroke-linecap="round"/><path d="M12 21.2c-4 0-6.6-2.5-6.6-6 0-2.4 1.3-4.6 3.2-5.7a6.8 6.8 0 0 1 6.8 0c1.9 1.1 3.2 3.3 3.2 5.7 0 3.5-2.6 6-6.6 6Z" fill="#F2E8D5"/></svg></div>
     <div class="badge" id="cartCount">0</div>
     <div class="info">
-      <div class="line1" id="cartLine1">Your circuit is empty</div>
+      <div class="line1" id="cartLine1">The Rack is empty</div>
       <div class="line2" id="cartLine2">Tap exercises below to add them</div>
     </div>
     <div class="dots" id="cartDots"></div>
@@ -246,7 +246,7 @@
   <div id="cartSheet">
     <header>
       <div class="back" onclick="closeCart()">‹</div>
-      <h1 class="gothic" id="cartTitle">Your Circuit</h1>
+      <h1 class="gothic" id="cartTitle">The Rack</h1>
       <div class="sub" id="cartSub"></div>
     </header>
     <div id="cartList"></div>
@@ -359,7 +359,7 @@ function syncBar(){
   $('cartCount').textContent = items.length;
   $('cartCount').style.display = items.length? 'flex':'none';
   if (!items.length){
-    $('cartLine1').textContent = mode==='fixed' ? 'Your circuit is empty' : 'No exercises yet';
+    $('cartLine1').textContent = mode==='fixed' ? 'The Rack is empty' : 'No exercises yet';
     $('cartLine2').textContent = 'Tap exercises below to add them';
   } else if (mode==='fixed'){
     $('cartLine1').textContent = `${items.length} exercise${items.length>1?'s':''} · ~${estPerSet().toLocaleString()} lbs/round`;
@@ -388,7 +388,7 @@ function closeCart(){ $('cartSheet').classList.remove('open'); renderLib(); sync
 
 function renderCart(){
   const list = $('cartList');
-  $('cartTitle').textContent = mode==='fixed' ? 'Your Circuit' : 'Your EMOM';
+  $('cartTitle').textContent = mode==='fixed' ? 'The Rack' : 'The Rack';
   $('cartSub').textContent = mode==='fixed' ? 'Part 1 · Fixed Sets' : 'Part 1 · EMOM';
   if (mode==='fixed'){ renderFixedCart(list); } else { renderEmomCart(list); }
   const items = allItems();
@@ -399,7 +399,7 @@ function renderCart(){
 
 function renderFixedCart(list){
   if (!cart.length){
-    list.innerHTML = `<div class="empty"><div class="big">🛒</div>Nothing here yet.<br>Add exercises from the library.
+    list.innerHTML = `<div class="empty"><div class="big"><svg  width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M8.2 9.1C8.07 8.2 7.6 5.9 7.6 5.2c0-1.5 1.6-2.4 4.4-2.4s4.4.9 4.4 2.4c0 .7-.47 3-.6 3.9" stroke="#F2E8D5" stroke-width="1.9" stroke-linecap="round"/><path d="M12 21.2c-4 0-6.6-2.5-6.6-6 0-2.4 1.3-4.6 3.2-5.7a6.8 6.8 0 0 1 6.8 0c1.9 1.1 3.2 3.3 3.2 5.7 0 3.5-2.6 6-6.6 6Z" fill="#F2E8D5"/></svg></div>Nothing here yet.<br>Add exercises from the library.
       <br><span class="loadBear" onclick="loadBear()">✨ demo: load Rolf's Bear Complex</span></div>`;
     return;
   }
