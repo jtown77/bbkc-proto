@@ -122,12 +122,16 @@
   .mvCard.chained { border-color:rgba(169,63,72,.55); }
   .dragH { color:var(--text2); font-size:19px; padding:6px 12px 6px 4px; cursor:grab;
     touch-action:none; user-select:none; -webkit-user-select:none; }
-  .mv.dragging { border-color:var(--primary); box-shadow:0 10px 24px rgba(0,0,0,.55);
-    position:relative; z-index:5; }
-  /* Keep connector space reserved during drag — hiding them with display:none
-     collapsed the list ("boxes compress"). They fade but hold their height. */
-  .dragMode .link, .dragMode .flowHint { opacity:0; pointer-events:none; }
-  .dragMode .mv { transition:none; }
+  /* Drag = lift OUT of the list (like the RN builder): the row floats under
+     your finger, a dashed placeholder holds its exact slot, nothing else
+     moves or resizes. */
+  #cartList { position:relative; }
+  .grpBody { position:relative; }
+  .rowWrap.floating { position:absolute; left:0; right:0; z-index:6; pointer-events:none; }
+  .rowWrap.floating .mvCard { border-color:var(--primary); box-shadow:0 10px 24px rgba(0,0,0,.55); }
+  .rowWrap.floating .link, .rowWrap.floating .flowHint { opacity:0; }
+  .phSlot { border:1.5px dashed var(--primary); border-radius:var(--r-md);
+    background:rgba(169,63,72,.06); }
   .wDot { min-width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:11px; font-weight:800; margin-right:10px; cursor:pointer; flex:none; padding:0 4px; }
   .mvName { flex:1; font-size:14px; font-weight:600; line-height:1.25; padding-right:6px; }
@@ -410,7 +414,7 @@ function renderFixedCart(list){
   }
   list.innerHTML = cart.map((m,i)=>{
     const chainHtml = i>0 ? chainConnector(m,i) : '';
-    return chainHtml + mvCard(m,i,'fixed');
+    return `<div class="rowWrap" data-key="${i}">${chainHtml}${mvCard(m,i,'fixed')}</div>`;
   }).join('');
 }
 function chainConnector(m,i){
@@ -481,7 +485,7 @@ function renderEmomCart(list){
         </span>
       </div>
       <div class="grpBody">
-        ${g.items.length ? g.items.map((m,i)=>mvCard(m,i,'emom',gi)).join('')
+        ${g.items.length ? g.items.map((m,i)=>`<div class=\"rowWrap\" data-key=\"${i}\">`+mvCard(m,i,'emom',gi)+`</div>`).join('')
           : `<div class="grpEmpty">No exercises yet.<br><b>Tap “Add exercises”</b> to pick what you'll do ${g.interval===1?'this minute':'in this window'}.</div>`}
         <div class="grpAddRow" onclick="addToGroup(${gi})">+ Add exercises to Group ${gi+1}</div>
       </div>
@@ -527,38 +531,56 @@ function loadBear(){
 }
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),2200); }
 
-/* ── drag-to-reorder (press the ☰ handle, drag, release) ── */
+/* ── drag-to-reorder: float the row, placeholder holds the slot ── */
 let drag = null;
-document.getElementById('cartList').addEventListener('pointerdown', (e) => {
+const listEl = document.getElementById('cartList');
+listEl.addEventListener('pointerdown', (e) => {
   const h = e.target.closest('[data-drag]'); if (!h) return;
   const card = h.closest('.mv'); if (!card) return;
+  const wrap = card.closest('.rowWrap'); if (!wrap) return;
   e.preventDefault();
   const ctx = card.dataset.ctx;
-  const container = ctx==='fixed' ? document.getElementById('cartList') : card.parentNode;
+  const container = wrap.parentNode; // #cartList (fixed) or .grpBody (emom)
+  const rect = wrap.getBoundingClientRect();
+  const ph = document.createElement('div');
+  ph.className = 'phSlot';
+  ph.style.height = rect.height + 'px';
+  ph.style.margin = getComputedStyle(wrap).margin;
+  container.insertBefore(ph, wrap);
   drag = {
-    card, ctx, g: card.dataset.g === '' ? null : +card.dataset.g, container,
+    wrap, ph, ctx, container,
+    g: card.dataset.g === '' ? null : +card.dataset.g,
     snapshot: ctx==='fixed' ? cart.slice() : groups[+card.dataset.g].items.slice(),
+    grabDY: e.clientY - rect.top,
   };
-  card.classList.add('dragging');
-  document.getElementById('cartList').classList.add('dragMode');
+  wrap.classList.add('floating');
+  wrap.style.width = rect.width + 'px';
+  wrap.style.left = (rect.left - container.getBoundingClientRect().left) + 'px';
+  positionFloat(e);
   h.setPointerCapture(e.pointerId);
 });
-document.getElementById('cartList').addEventListener('pointermove', (e) => {
+function positionFloat(e){
+  const cRect = drag.container.getBoundingClientRect();
+  const scroll = drag.container === listEl ? listEl.scrollTop : 0;
+  drag.wrap.style.top = (e.clientY - cRect.top + scroll - drag.grabDY) + 'px';
+}
+listEl.addEventListener('pointermove', (e) => {
   if (!drag) return;
   e.preventDefault();
+  positionFloat(e);
   const el = document.elementFromPoint(e.clientX, e.clientY);
-  const over = el && el.closest('.mv');
-  if (!over || over === drag.card) return;
-  if (drag.ctx==='emom' && over.parentNode !== drag.container) return; // stay in your group
-  if (drag.ctx==='fixed' && over.dataset.ctx !== 'fixed') return;
+  const over = el && el.closest('.rowWrap');
+  if (!over || over === drag.wrap || over.parentNode !== drag.container) return;
   const r = over.getBoundingClientRect();
-  if (e.clientY > r.top + r.height/2) over.after(drag.card); else over.before(drag.card);
+  if (e.clientY > r.top + r.height/2) over.after(drag.ph); else over.before(drag.ph);
 });
 function endDrag(){
   if (!drag) return;
-  const cards = [...drag.container.querySelectorAll('.mv')].filter(c =>
-    drag.ctx==='fixed' ? c.dataset.ctx==='fixed' : c.parentNode===drag.container);
-  const keys = cards.map(c => +c.dataset.key);
+  drag.wrap.classList.remove('floating');
+  drag.wrap.style.width = drag.wrap.style.top = drag.wrap.style.left = '';
+  drag.container.insertBefore(drag.wrap, drag.ph);
+  drag.ph.remove();
+  const keys = [...drag.container.querySelectorAll(':scope > .rowWrap')].map(w => +w.dataset.key);
   if (drag.ctx==='fixed'){
     const snap = drag.snapshot;
     cart = keys.map(k => snap[k]);
@@ -570,13 +592,11 @@ function endDrag(){
   } else {
     groups[drag.g].items = keys.map(k => drag.snapshot[k]);
   }
-  drag.card.classList.remove('dragging');
-  document.getElementById('cartList').classList.remove('dragMode');
   drag = null;
   renderCart(); syncBar();
 }
-document.getElementById('cartList').addEventListener('pointerup', endDrag);
-document.getElementById('cartList').addEventListener('pointercancel', endDrag);
+listEl.addEventListener('pointerup', endDrag);
+listEl.addEventListener('pointercancel', endDrag);
 
 renderLib(); syncBar();
 </script>
