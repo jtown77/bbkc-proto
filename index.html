@@ -120,9 +120,12 @@
   .mvCard { background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
     display:flex; align-items:center; padding:10px 10px; position:relative; }
   .mvCard.chained { border-color:rgba(169,63,72,.55); }
-  .mv .ord { display:flex; flex-direction:column; margin-right:8px; }
-  .ordBtn { color:var(--text2); font-size:13px; padding:2px 6px; cursor:pointer; }
-  .ordBtn:active { color:var(--cream); }
+  .dragH { color:var(--text2); font-size:19px; padding:6px 12px 6px 4px; cursor:grab;
+    touch-action:none; user-select:none; -webkit-user-select:none; }
+  .mv.dragging { opacity:.95; border-color:var(--primary); box-shadow:0 10px 24px rgba(0,0,0,.55);
+    position:relative; z-index:5; transform:scale(1.02); }
+  .dragMode .link, .dragMode .flowHint { display:none; }
+  .dragMode .mv { transition:none; }
   .wDot { min-width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:11px; font-weight:800; margin-right:10px; cursor:pointer; flex:none; padding:0 4px; }
   .mvName { flex:1; font-size:14px; font-weight:600; line-height:1.25; padding-right:6px; }
@@ -440,11 +443,8 @@ function mvCard(m,i,ctx,gi){
   const dotLabel = m.lbs ? (m.eqp==='double'?'2×':'')+m.lbs : 'BW';
   const chained = ctx==='fixed' && (m.chainPrev || (cart[i+1]&&cart[i+1].chainPrev));
   const args = ctx==='fixed' ? `${i}` : `${gi},${i}`;
-  return `<div class="mvCard ${chained?'chained':''} mv">
-    <div class="ord">
-      <div class="ordBtn" onclick="move(${args},-1)">▲</div>
-      <div class="ordBtn" onclick="move(${args},1)">▼</div>
-    </div>
+  return `<div class="mvCard ${chained?'chained':''} mv" data-ctx="${ctx}" data-g="${gi??''}" data-key="${i}">
+    <div class="dragH" data-drag>☰</div>
     <div class="wDot" style="${dotStyle}" onclick="openBell(${args})">${dotLabel}</div>
     <div class="mvName">${m.name}<small>${m.eqp==='double'?'double bells':m.eqp==='bodyweight'?'bodyweight':'single bell'} · tap dot to change</small></div>
     <div class="repCtl">
@@ -457,13 +457,6 @@ function mvCard(m,i,ctx,gi){
 }
 
 /* fixed-mode ops (1 arg) vs emom (2 args) */
-function move(a,b,c){
-  if (mode==='fixed'){ const i=a,d=b; const j=i+d; if(j<0||j>=cart.length)return;
-    [cart[i],cart[j]]=[cart[j],cart[i]]; }
-  else { const g=a,i=b,d=c; const arr=groups[g].items; const j=i+d; if(j<0||j>=arr.length)return;
-    [arr[i],arr[j]]=[arr[j],arr[i]]; }
-  renderCart(); syncBar();
-}
 function rep(a,b,c){
   if (mode==='fixed'){ cart[a].reps=Math.max(1,cart[a].reps+b); }
   else { const m=groups[a].items[b]; m.reps=Math.max(1,m.reps+c); }
@@ -531,6 +524,57 @@ function loadBear(){
   renderCart(); syncBar(); renderLib(); toast('The Bear 🐻 — chain ×7, 5 sets, rest 2:00');
 }
 function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),2200); }
+
+/* ── drag-to-reorder (press the ☰ handle, drag, release) ── */
+let drag = null;
+document.getElementById('cartList').addEventListener('pointerdown', (e) => {
+  const h = e.target.closest('[data-drag]'); if (!h) return;
+  const card = h.closest('.mv'); if (!card) return;
+  e.preventDefault();
+  const ctx = card.dataset.ctx;
+  const container = ctx==='fixed' ? document.getElementById('cartList') : card.parentNode;
+  drag = {
+    card, ctx, g: card.dataset.g === '' ? null : +card.dataset.g, container,
+    snapshot: ctx==='fixed' ? cart.slice() : groups[+card.dataset.g].items.slice(),
+  };
+  card.classList.add('dragging');
+  document.getElementById('cartList').classList.add('dragMode');
+  h.setPointerCapture(e.pointerId);
+});
+document.getElementById('cartList').addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  e.preventDefault();
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const over = el && el.closest('.mv');
+  if (!over || over === drag.card) return;
+  if (drag.ctx==='emom' && over.parentNode !== drag.container) return; // stay in your group
+  if (drag.ctx==='fixed' && over.dataset.ctx !== 'fixed') return;
+  const r = over.getBoundingClientRect();
+  if (e.clientY > r.top + r.height/2) over.after(drag.card); else over.before(drag.card);
+});
+function endDrag(){
+  if (!drag) return;
+  const cards = [...drag.container.querySelectorAll('.mv')].filter(c =>
+    drag.ctx==='fixed' ? c.dataset.ctx==='fixed' : c.parentNode===drag.container);
+  const keys = cards.map(c => +c.dataset.key);
+  if (drag.ctx==='fixed'){
+    const snap = drag.snapshot;
+    cart = keys.map(k => snap[k]);
+    // Chains survive ONLY where the original neighbor pair is still adjacent
+    // (mirrors the RN builder: flow grouping is consecutive-membership).
+    cart.forEach((m,p) => {
+      m.chainPrev = p>0 && m.chainPrev && keys[p-1] === keys[p]-1;
+    });
+  } else {
+    groups[drag.g].items = keys.map(k => drag.snapshot[k]);
+  }
+  drag.card.classList.remove('dragging');
+  document.getElementById('cartList').classList.remove('dragMode');
+  drag = null;
+  renderCart(); syncBar();
+}
+document.getElementById('cartList').addEventListener('pointerup', endDrag);
+document.getElementById('cartList').addEventListener('pointercancel', endDrag);
 
 renderLib(); syncBar();
 </script>
