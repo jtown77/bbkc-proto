@@ -571,7 +571,12 @@ listEl.addEventListener('pointermove', (e) => {
   const over = el && el.closest('.rowWrap');
   if (!over || over === drag.wrap || over.parentNode !== drag.container) return;
   const r = over.getBoundingClientRect();
+  const before = drag.ph.nextElementSibling;
   if (e.clientY > r.top + r.height/2) over.after(drag.ph); else over.before(drag.ph);
+  // Haptic tick each time the drop slot crosses another exercise.
+  // (navigator.vibrate is Android-only on the web; iOS Safari ignores it —
+  //  the RN build uses expo-haptics selection ticks on both platforms.)
+  if (drag.ph.nextElementSibling !== before && navigator.vibrate) navigator.vibrate(8);
 });
 function endDrag(){
   if (!drag) return;
